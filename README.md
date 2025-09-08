@@ -4,7 +4,7 @@
 
 ---
 
-## 👨‍💻 SIBRE EL ESTUDIANTE:
+## 👨‍💻 SOBRE EL ESTUDIANTE:
 
 * **Universitario:** Walter Mauricio Sanchez Toledo
 * **Cédula de Identidad:** 10922067
