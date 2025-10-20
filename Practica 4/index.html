@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Crossy Road con Texturas</title>
+</head>
+
+<body>
+    <h1>Crossy Road</h1>
+    <canvas id="webglcanvas" width="600" height="600"></canvas>
+    <h2 id="mensaje">Puntuación: 0</h2>
+
+    <img src="jugador.png" id="img_jugador" hidden />
+    <img src="carro1.png" id="img_carro1" hidden />
+    <img src="carro2.png" id="img_carro2" hidden />
+    <img src="pasto.jpg" id="img_pasto" hidden />
+    <img src="carretera.png" id="img_carretera" hidden />
+
+    <script id="vs" type="vertex">
+        #version 300 es
+        uniform mat4 uMatrizProyeccion;
+        uniform mat4 uMatrizModelo;
+
+        layout(location = 0) in vec2 aVertices;
+        layout(location = 1) in vec2 aCoordenadasDeTextura; 
+
+        out vec2 vCoordenadasDeTextura; 
+
+        void main() {
+            vCoordenadasDeTextura = aCoordenadasDeTextura; 
+            gl_Position = uMatrizProyeccion * uMatrizModelo * vec4(aVertices, 0.0, 1.0);
+        }
+    </script>
+
+    <script id="fs" type="fragment">
+        #version 300 es
+        precision mediump float;
+        
+        uniform sampler2D uUnidadDeTextura; 
+        in vec2 vCoordenadasDeTextura;     
+        
+        out vec4 color;
+
+        void main() {
+            color = texture(uUnidadDeTextura, vCoordenadasDeTextura); 
+        }
+    </script>
+
+
+    <script>
+        function identidad(r) {
+            r[0] = 1; r[4] = 0; r[8] = 0; r[12] = 0;
+            r[1] = 0; r[5] = 1; r[9] = 0; r[13] = 0;
+            r[2] = 0; r[6] = 0; r[10] = 1; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+        }
+
+        function traslacion(matriz, tx, ty, tz) {
+            let r = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, tx, ty, tz, 1];
+            multiplica(matriz, matriz, r);
+        }
+
+        function escalacion(matriz, sx, sy, sz) {
+            let r = [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, 0, 0, 0, 1];
+            multiplica(matriz, matriz, r);
+        }
+
+        function ortho(r, izq, der, abj, arr, cerca, lejos) {
+            r[0] = 2 / (der - izq); r[4] = 0; r[8] = 0; r[12] = -(der + izq) / (der - izq);
+            r[1] = 0; r[5] = 2 / (arr - abj); r[9] = 0; r[13] = -(arr + abj) / (arr - abj);
+            r[2] = 0; r[6] = 0; r[10] = -2 / (lejos - cerca); r[14] = -(lejos + cerca) / (lejos - cerca);
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+        }
+
+        function multiplica(c, a, b) {
+            let r = new Array(16);
+            for (let i = 0; i < 4; i++) {
+                for (let j = 0; j < 4; j++) {
+                    let s = 0;
+                    for (let k = 0; k < 4; k++) s += a[i + k * 4] * b[k + j * 4];
+                    r[i + j * 4] = s;
+                }
+            }
+            for (let i = 0; i < 16; i++) c[i] = r[i];
+        }
+
+        function leeLaTextura(ID_del_archivo, codigoDeTextura) {
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagen = document.getElementById(ID_del_archivo);
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagen);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+        }
+
+        let gl, canvas;
+        let uMatrizProyeccion, uMatrizModelo;
+        let uUnidadDeTextura;
+        let MatrizProyeccion = new Array(16), MatrizModelo = new Array(16);
+        let rectanguloVAO;
+
+        let texJugador, texPasto, texCarretera;
+        let texCarro1, texCarro2;
+
+        let puntuacion = 0;
+        let filaMasAlta = 0;
+        let gameOver = false;
+
+        const TAMANO_CARRIL = 1.6;
+        const NUM_FILAS = 10;
+        const ANCHO_MUNDO = 10;
+
+        let jugador;
+        let carros = [];
+        let zonas = [];
+
+        class Jugador {
+            constructor() {
+                this.fila = 0;
+                this.columna = 0;
+                this.ancho = TAMANO_CARRIL * 0.7;
+                this.alto = TAMANO_CARRIL * 0.7;
+            }
+
+            getBordes() {
+                const x = this.columna * TAMANO_CARRIL;
+                const y = this.fila * TAMANO_CARRIL - (NUM_FILAS * TAMANO_CARRIL / 2.5);
+                return {
+                    izq: x - this.ancho / 2,
+                    der: x + this.ancho / 2,
+                    abj: y - this.alto / 2,
+                    arr: y + this.alto / 2,
+                };
+            }
+
+            dibujar() {
+                const bordes = this.getBordes();
+                const x = (bordes.izq + bordes.der) / 2;
+                const y = (bordes.abj + bordes.arr) / 2;
+
+                identidad(MatrizModelo);
+                traslacion(MatrizModelo, x, y, 0);
+                escalacion(MatrizModelo, this.ancho, this.alto, 1);
+
+                gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo);
+                gl.bindTexture(gl.TEXTURE_2D, texJugador);
+                gl.bindVertexArray(rectanguloVAO);
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            }
+        }
+
+        class Carro {
+            constructor(fila, velocidad, ancho, textura) {
+                this.fila = fila;
+                this.y = fila * TAMANO_CARRIL - (NUM_FILAS * TAMANO_CARRIL / 2.5);
+                this.velocidad = velocidad;
+                this.ancho = ancho;
+                this.alto = TAMANO_CARRIL * 0.8;
+                this.x = (velocidad > 0 ? -ANCHO_MUNDO : ANCHO_MUNDO) + (Math.random() * 4 - 2);
+                this.textura = textura;
+            }
+
+            mover() {
+                this.x += this.velocidad;
+                if (this.velocidad > 0 && this.x > ANCHO_MUNDO) {
+                    this.x = -ANCHO_MUNDO;
+                }
+                if (this.velocidad < 0 && this.x < -ANCHO_MUNDO) {
+                    this.x = ANCHO_MUNDO;
+                }
+            }
+
+            getBordes() {
+                return {
+                    izq: this.x - this.ancho / 2,
+                    der: this.x + this.ancho / 2,
+                    abj: this.y - this.alto / 2,
+                    arr: this.y + this.alto / 2,
+                };
+            }
+
+            dibujar() {
+                identidad(MatrizModelo);
+                traslacion(MatrizModelo, this.x, this.y, 0);
+
+                let escalaX = this.ancho;
+                escalacion(MatrizModelo, escalaX, this.alto, 1);
+
+                gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo);
+                gl.bindTexture(gl.TEXTURE_2D, this.textura);
+
+                gl.bindVertexArray(rectanguloVAO);
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            }
+        }
+
+        class Zona {
+            constructor(fila, textura) {
+                this.y = fila * TAMANO_CARRIL - (NUM_FILAS * TAMANO_CARRIL / 2.5);
+                this.textura = textura;
+            }
+
+            dibujar() {
+                identidad(MatrizModelo);
+                traslacion(MatrizModelo, 0, this.y, 0);
+                escalacion(MatrizModelo, ANCHO_MUNDO * 2, TAMANO_CARRIL, 1);
+                gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo);
+                gl.bindTexture(gl.TEXTURE_2D, this.textura);
+                gl.bindVertexArray(rectanguloVAO);
+                gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            }
+        }
+
+        function main() {
+            canvas = document.getElementById("webglcanvas");
+            gl = canvas.getContext("webgl2");
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+            let vs = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(vs, document.getElementById("vs").text.trim());
+            gl.compileShader(vs);
+            let fs = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(fs, document.getElementById("fs").text.trim());
+            gl.compileShader(fs);
+            let programa = gl.createProgram();
+            gl.attachShader(programa, vs);
+            gl.attachShader(programa, fs);
+            gl.linkProgram(programa);
+            gl.useProgram(programa);
+
+            let vertices = [-0.5, -0.5, 0.5, -0.5, 0.5, 0.5, -0.5, 0.5];
+            let coord_textura = [0.0, 0.0, 1.0, 0.0, 1.0, 1.0, 0.0, 1.0];
+            rectanguloVAO = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAO);
+            let bufferVertices = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, bufferVertices);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+            let bufferTexCoords = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, bufferTexCoords);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            uUnidadDeTextura = gl.getUniformLocation(programa, "uUnidadDeTextura");
+            uMatrizProyeccion = gl.getUniformLocation(programa, "uMatrizProyeccion");
+            uMatrizModelo = gl.getUniformLocation(programa, "uMatrizModelo");
+
+            ortho(MatrizProyeccion, -ANCHO_MUNDO, ANCHO_MUNDO, -NUM_FILAS, NUM_FILAS, -1, 1);
+            gl.uniformMatrix4fv(uMatrizProyeccion, false, MatrizProyeccion);
+            gl.activeTexture(gl.TEXTURE0);
+            gl.uniform1i(uUnidadDeTextura, 0);
+
+            texJugador = gl.createTexture();
+            leeLaTextura("img_jugador", texJugador);
+
+            texCarro1 = gl.createTexture();
+            leeLaTextura("img_carro1", texCarro1);
+
+            texCarro2 = gl.createTexture();
+            leeLaTextura("img_carro2", texCarro2);
+
+            texPasto = gl.createTexture();
+            leeLaTextura("img_pasto", texPasto);
+
+            texCarretera = gl.createTexture();
+            leeLaTextura("img_carretera", texCarretera);
+
+            jugador = new Jugador();
+
+            for (let i = 0; i < NUM_FILAS; i++) {
+                if (i === 0 || i === NUM_FILAS - 1 || i === Math.floor(NUM_FILAS / 2)) {
+                    zonas.push(new Zona(i, texPasto));
+                } else {
+                    zonas.push(new Zona(i, texCarretera));
+                }
+            }
+
+            for (let i = 1; i < NUM_FILAS - 1; i++) {
+                if (i !== Math.floor(NUM_FILAS / 2)) {
+                    const numCarros = 2;
+                    const velocidad = (Math.random() * 0.1 + 0.05) * (i % 2 === 0 ? 1 : -1);
+                    const ancho = Math.random() * 2 + 2;
+
+                    let texturaCarro;
+                    if (velocidad > 0) {
+                        texturaCarro = texCarro2;
+                    } else {
+                        texturaCarro = texCarro1;
+                    }
+
+                    for (let j = 0; j < numCarros; j++) {
+                        let carro = new Carro(i, velocidad, ancho, texturaCarro);
+                        carro.x += j * (ANCHO_MUNDO / numCarros);
+                        carros.push(carro);
+                    }
+                }
+            }
+
+            window.addEventListener('keydown', manejarTeclado);
+
+            gl.clearColor(0.1, 0.1, 0.2, 1.0);
+            dibuja();
+        }
+
+        function manejarTeclado(e) {
+            if (gameOver) return;
+
+            const maxColumna = Math.floor(ANCHO_MUNDO / TAMANO_CARRIL) - 2;
+
+            switch (e.key) {
+                case 'ArrowUp':
+                    if (jugador.fila < NUM_FILAS - 1) jugador.fila++;
+                    actualizarPuntuacion();
+                    break;
+                case 'ArrowDown':
+                    if (jugador.fila > 0) jugador.fila--;
+                    break;
+                case 'ArrowLeft':
+                    if (jugador.columna > -maxColumna) jugador.columna--;
+                    break;
+                case 'ArrowRight':
+                    if (jugador.columna < maxColumna) jugador.columna++;
+                    break;
+            }
+        }
+
+        function actualizarPuntuacion() {
+            if (jugador.fila > filaMasAlta) {
+                filaMasAlta = jugador.fila;
+                puntuacion++;
+                document.getElementById('mensaje').innerText = "Puntuación: " + puntuacion;
+            }
+        }
+
+        function comprobarColisiones() {
+            const bordesJugador = jugador.getBordes();
+            for (const carro of carros) {
+                if (carro.fila === jugador.fila) {
+                    const bordesCarro = carro.getBordes();
+                    if (bordesJugador.izq < bordesCarro.der &&
+                        bordesJugador.der > bordesCarro.izq &&
+                        bordesJugador.abj < bordesCarro.arr &&
+                        bordesJugador.arr > bordesCarro.abj) {
+                        gameOver = true;
+                        document.getElementById('mensaje').innerText = "¡PERDISTE! Puntuación final: " + puntuacion;
+                    }
+                }
+            }
+            if (jugador.fila === NUM_FILAS - 1) {
+                gameOver = true;
+                document.getElementById('mensaje').innerText = "¡GANASTE! Puntuación final: " + puntuacion;
+            }
+        }
+
+        function dibuja() {
+            requestAnimationFrame(dibuja);
+            gl.clear(gl.COLOR_BUFFER_BIT);
+
+            zonas.forEach(z => z.dibujar());
+
+            carros.forEach(c => {
+                if (!gameOver) c.mover();
+                c.dibujar();
+            });
+
+            jugador.dibujar();
+
+            if (!gameOver) {
+                comprobarColisiones();
+            }
+        }
+
+        window.onload = main;
+    </script>
+</body>
+
+</html>
