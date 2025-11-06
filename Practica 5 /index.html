@@ -1,0 +1,667 @@
+<!DOCTYPE HTML>
+<html>
+
+<head>
+    <title>Textura 2D en WebGL 2.0</title>
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8">
+
+    <style>
+        html, body {
+            width:  100%;
+            height: 100%;
+            margin: 0px;
+            border: 0;
+            overflow: hidden; /* Deshabilita las barras de desplazamiento */
+            display: block;  /* Sin contenido flotantes a los lados */
+        }
+    </style>
+</head>
+
+<body>
+    <title>Textura 2D en WebGL 2.0</title>
+    
+    <canvas id="webglcanvas" style="border: none;" width="500" height="500"></canvas>
+    
+    <img src="Warrior_Blue.png" id="imagenTextura" hidden />
+    <img src="Archer_Purple.png" id="imagenTextura2" hidden />
+    <img src="Pawn_Red.png" id="imagenTextura3" hidden />
+    <img src="fondo.png" id="imagenFondo" hidden />
+    <img src="Castle_Purple.png" id="imagenDecoracion1" hidden />
+    <img src="Castle_Destroyed.png" id="imagenDecoracion2" hidden />
+    <script id="vs" type="vertex">
+        #version 300 es
+        precision mediump float;
+        uniform mat4 uMatrizProyeccion;
+        uniform mat4 uMatrizVista;
+        uniform mat4 uMatrizModelo;
+        uniform mat4 uMatrizTextura;
+        layout(location = 0) in vec2 aVertices;
+        layout(location = 1) in vec2 aCoordenadasDeTextura;
+        out vec2 vCoordenadasDeTextura;
+        void main() {
+            vCoordenadasDeTextura = (uMatrizTextura * vec4(aCoordenadasDeTextura, 0.0, 1.0)).xy;  
+            gl_Position = uMatrizProyeccion * uMatrizVista * uMatrizModelo * vec4(aVertices, 0.0, 1.0);
+        }
+      </script>
+
+    <script id="fs" type="fragment">
+        #version 300 es
+        precision mediump float;
+        uniform sampler2D uUnidadDeTextura;
+        in vec2 vCoordenadasDeTextura;
+        out vec4 color;
+        void main() {
+            color = texture(uUnidadDeTextura, vCoordenadasDeTextura); 
+        }
+      </script>
+
+    <script>
+        "use strict";
+
+        /***************************************************************************/
+        /* Transformaciones mediante matrices                                      */
+        /***************************************************************************/
+
+        /* Convierte de grados a radianes */
+        function toRadians(grados) {
+            return grados * Math.PI / 180;
+        };
+
+        /* Matriz Identidad */
+        function identidad(r) {
+            r[0] = 1; r[4] = 0; r[8] = 0; r[12] = 0;
+            r[1] = 0; r[5] = 1; r[9] = 0; r[13] = 0;
+            r[2] = 0; r[6] = 0; r[10] = 1; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+        }
+
+        /* Traslación - glTranslatef */
+        function traslacion(matriz, tx, ty, tz) {
+            let r = new Array(16);
+            r[0] = 1; r[4] = 0; r[8] = 0; r[12] = tx;
+            r[1] = 0; r[5] = 1; r[9] = 0; r[13] = ty;
+            r[2] = 0; r[6] = 0; r[10] = 1; r[14] = tz;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+            multiplica(matriz, matriz, r);
+        }
+
+        /* Escalación - glScalef */
+        function escalacion(matriz, sx, sy, sz) {
+            let r = new Array(16);
+            r[0] = sx; r[4] = 0; r[8] = 0; r[12] = 0;
+            r[1] = 0; r[5] = sy; r[9] = 0; r[13] = 0;
+            r[2] = 0; r[6] = 0; r[10] = sz; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+            multiplica(matriz, matriz, r);
+        }
+
+        /* Rotación sobre X - glRotatef */
+        function rotacionX(matriz, theta) {
+            let r = new Array(16);
+            let c = Math.cos(toRadians(theta));
+            let s = Math.sin(toRadians(theta));
+            r[0] = 1; r[4] = 0; r[8] = 0; r[12] = 0;
+            r[1] = 0; r[5] = c; r[9] = -s; r[13] = 0;
+            r[2] = 0; r[6] = s; r[10] = c; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+            multiplica(matriz, matriz, r);
+        }
+
+        /* Rotación sobre Y - glRotatef */
+        function rotacionY(matriz, theta) {
+            let r = new Array(16);
+            let c = Math.cos(toRadians(theta));
+            let s = Math.sin(toRadians(theta));
+            r[0] = c; r[4] = 0; r[8] = s; r[12] = 0;
+            r[1] = 0; r[5] = 1; r[9] = 0; r[13] = 0;
+            r[2] = -s; r[6] = 0; r[10] = c; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+            multiplica(matriz, matriz, r);
+        }
+
+        /* Rotación sobre Z - glRotatef */
+        function rotacionZ(matriz, theta) {
+            let r = new Array(16);
+            let c = Math.cos(toRadians(theta));
+            let s = Math.sin(toRadians(theta));
+            r[0] = c; r[4] = -s; r[8] = 0; r[12] = 0;
+            r[1] = s; r[5] = c; r[9] = 0; r[13] = 0;
+            r[2] = 0; r[6] = 0; r[10] = 1; r[14] = 0;
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+            multiplica(matriz, matriz, r);
+        }
+
+        /* Proyección Paralela - glOrtho */
+        function ortho(r, izq, der, abj, arr, cerca, lejos) {
+            r[0] = 2 / (der - izq); r[4] = 0; r[8] = 0; r[12] = -(der + izq) / (der - izq);
+            r[1] = 0; r[5] = 2 / (arr - abj); r[9] = 0; r[13] = -(arr + abj) / (arr - abj);
+            r[2] = 0; r[6] = 0; r[10] = -2 / (lejos - cerca); r[14] = -(lejos + cerca) / (lejos - cerca);
+            r[3] = 0; r[7] = 0; r[11] = 0; r[15] = 1;
+        }
+
+        /* Multiplicación de matrices de 4 x 4 */
+        function multiplica(c, a, b) {
+            let r = new Array(16);
+            let i, j, k;
+            for (i = 0; i < 4; i++) {
+                for (j = 0; j < 4; j++) {
+                    let s = 0;
+                    for (k = 0; k < 4; k++)
+                        s = s + a[i + k * 4] * b[k + j * 4];
+                    r[i + j * 4] = s;
+                }
+            }
+            for (i = 0; i < 16; i++)
+                c[i] = r[i];
+        }
+
+        /* Variables globales */
+        let gl, canvas; // <--- SE AÑADIÓ 'canvas' AQUÍ
+        let programaID;
+        let textura;
+        let codigoDeTextura;
+        let codigoDeTextura2; //codigo textura imagen 2
+        let codigoDeTextura3; 
+        let codigoDeTexturaFondo;
+        let codigoDeTexturaDeco1;
+        let codigoDeTexturaDeco2;
+
+
+        /* Variables Uniformes */
+        let uMatrizProyeccion;
+        let uMatrizVista;
+        let uMatrizModelo;
+        let uUnidadDeTextura;
+        let uMatrizTextura;
+
+        /* Matrices */
+        let MatrizProyeccion = new Array(16);
+        let MatrizVista = new Array(16);
+        let MatrizModelo = new Array(16);
+        let MatrizModelo2 = new Array(16);   //matriz modelo imagen 2
+        let MatrizModelo3 = new Array(16);
+        let MatrizModeloFondo = new Array(16);
+        let MatrizModeloDeco1 = new Array(16);
+        let MatrizModeloDeco2 = new Array(16);
+
+        let MatrizTextura = new Array(16);
+
+        let tiempo_real;
+        let inicio = Date.now(); // Tiempo Inicial
+        let fin, duracion;
+        const PERIODO_MOVIMIENTO = 0.1; // 1/60 = 0.0167 (60 cuadros por seg.)
+        let tiempoMovimiento = PERIODO_MOVIMIENTO;
+
+        let rectanguloVAO; //geometria warrior azul
+        let rectanguloVAO2; //geometria arquero purple
+        let rectanguloVAO3; //GEOMETRIA PAWN RED
+        let rectanguloVAOFondo;
+        let rectanguloVAODeco1;
+
+        let dt = 0; //animacion caballero azul
+        let dt2 = 0;  //animacion arquero purpura
+        let dt3 = 0; //animacion  pawn red
+
+
+
+        let tx = -4; //posicion inicial horizontal imagen1
+        let ty = -3;  //posicion inicial vertical imagen 1
+        let tx2 = -2; //posicion inicial horizontal imagen2
+        let ty2 = 1;  //posicion inicial vertical imagen 2
+        let tx3 = 0;  // red pawn horiontal
+        let ty3 = 3; //red pawn vertical
+        let txFondo = 0;
+        let tyFondo = 0;
+        let txDeco1 = -2;
+        let tyDeco1 = 0;
+        let txDeco2 = 2;
+        let tyDeco2 = 4; // <-- ¡CORREGÍ EL ERROR DE MAYÚSCULA (tYDeco2)!
+
+        function dibuja() {
+            gl.clear(gl.COLOR_BUFFER_BIT); //limpia pantalla
+            
+            //0 ------------------ DIBUJAR EL FONDO
+            gl.bindVertexArray(rectanguloVAOFondo);  //USAR VAO FONDO
+            identidad(MatrizModeloFondo);
+            traslacion(MatrizModeloFondo, txFondo, tyFondo, 0);
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModeloFondo);
+            identidad(MatrizTextura);
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaFondo);
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+
+            //0.5 ------------------ DIBUJAR DECORACION 1
+            gl.bindVertexArray(rectanguloVAODeco1);  //USAR VAO DECO1
+            identidad(MatrizModeloDeco1);
+            traslacion(MatrizModeloDeco1, txDeco1, tyDeco1, 0); //Usa la posición estática
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModeloDeco1);
+            
+            // Textura estática (sin dt, sin traslacion)
+            identidad(MatrizTextura);
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+            
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaDeco1); //Usa la textura Deco1
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+            // --- FIN DEL BLOQUE NUEVO ---
+
+            //0.6 ------------------ DIBUJAR DECORACION 2
+            gl.bindVertexArray(rectanguloVAODeco1);  // <-- ¡SE REUSA EL MISMO VAO!
+            
+            identidad(MatrizModeloDeco2); 
+            traslacion(MatrizModeloDeco2, txDeco2, tyDeco2, 0); 
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModeloDeco2); 
+            
+            identidad(MatrizTextura);
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+            
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaDeco2); 
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4);
+
+
+            //1 ------------------ DIBUJAR AL KNIGHT BLUE
+            gl.bindVertexArray(rectanguloVAO);  //USAR VAO WARRIOR BLUE
+            identidad(MatrizModelo);
+            traslacion(MatrizModelo, tx, ty, 0); //movemos horizontal tx, y verticalmente ty
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo);
+
+            identidad(MatrizTextura);
+            traslacion(MatrizTextura, dt, 0, 0); //animacion textura imagen1
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura); //usar textura imagen1
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4); //dibuja imagen1
+
+
+            //2 -------------------------- DIBUJAR AL PURPLE ARCHER
+            gl.bindVertexArray(rectanguloVAO2);
+            identidad(MatrizModelo2);
+            traslacion(MatrizModelo2, tx2, ty2, 0);
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo2);
+
+            identidad(MatrizTextura); //resetea matriz textura
+            traslacion(MatrizTextura, dt2, 0, 0); //animacion textura imagen2
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura2); //usa textura sprite 2
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4); //dibuja el sprite 2
+
+
+            //3 -------------------------- DIBUJAR AL PAWN RED (Corregí el comentario, era 3 no 2)
+            gl.bindVertexArray(rectanguloVAO3);
+            identidad(MatrizModelo3);
+            traslacion(MatrizModelo3, tx3, ty3, 0);
+            gl.uniformMatrix4fv(uMatrizModelo, false, MatrizModelo3);
+
+            identidad(MatrizTextura); //resetea matriz textura
+            traslacion(MatrizTextura, dt3, 0, 0); //animacion textura imagen2
+            gl.uniformMatrix4fv(uMatrizTextura, false, MatrizTextura);
+
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura3); //usa textura sprite 2
+            gl.drawArrays(gl.TRIANGLE_FAN, 0, 4); //dibuja el sprite 2
+
+            // ------- FIN DIBUJO
+            gl.bindVertexArray(null); //desconecta la geometria
+
+            // ------- LOGICA DE ANIMACION
+            fin = Date.now(); // Tiempo Final
+            duracion = fin - inicio;
+            inicio = fin;
+            tiempo_real = duracion / 1000.0;
+            tiempoMovimiento = tiempoMovimiento - tiempo_real;
+            tx = tx + 0.01;  //desplazamiento imagen horizontalmente
+
+            if (tx > 4) //si la imagen llega al limite horizontal, reiniciamos posicion inicial
+                tx = -4;
+
+            if (tiempoMovimiento < 0.001) {
+                tiempoMovimiento = PERIODO_MOVIMIENTO;
+
+                // Animacion Caballero
+                dt = dt + 1 / 6;
+                if (dt > 5 / 6)
+                    dt = 0;
+
+                // Animacion Arquero
+                dt2 = dt2 +1/8;
+                if(dt2>5/8) //
+                    dt2 = 0;
+
+                // Animacion PAWN RED
+                dt3 = dt3 +1/6;
+                if(dt3>5/6) 
+                    dt3 = 0;
+                
+            }
+
+            requestAnimationFrame(dibuja);
+        }
+
+        function main() {
+            /***************************************************************************/
+            /* Paso 1: Se prepara el lienzo y se obtiene el contexto del WebGL.        */
+            /***************************************************************************/
+            canvas = document.getElementById("webglcanvas"); // <--- AÑADIDO A VARIABLE GLOBAL
+
+            // CAMBIO 2: AJUSTAR EL TAMAÑO DEL CANVAS A LA VENTANA
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+
+            gl = canvas.getContext("webgl2");
+            if (!gl) {
+                document.write("WebGL 2.0 no está disponible en tu navegador");
+                return;
+            }
+
+            /* Se define la ventana de despliegue (YA ESTABA, AHORA USA EL TAMAÑO NUEVO) */
+            gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+
+            /***************************************************************************/
+            /* Paso 2: Se crean, compilan y enlazan los programas Shader               */
+            /***************************************************************************/
+
+            /* Se compila el shader de vertice */
+            let shaderDeVertice = gl.createShader(gl.VERTEX_SHADER);
+            gl.shaderSource(shaderDeVertice, document.getElementById("vs").text.trim());
+            gl.compileShader(shaderDeVertice);
+
+            /* Se compila el shader de fragmento */
+            let shaderDeFragmento = gl.createShader(gl.FRAGMENT_SHADER);
+            gl.shaderSource(shaderDeFragmento, document.getElementById("fs").text.trim());
+            gl.compileShader(shaderDeFragmento);
+
+            /* Se enlaza ambos shader */
+            programaID = gl.createProgram();
+            gl.attachShader(programaID, shaderDeVertice);
+            gl.attachShader(programaID, shaderDeFragmento);
+            gl.linkProgram(programaID);
+
+            /* Se instala el programa de shaders para utilizarlo */
+            gl.useProgram(programaID);
+
+            // Obtiene los ID de las variables de entrada de los shaders
+            uMatrizProyeccion = gl.getUniformLocation(programaID, "uMatrizProyeccion");
+            uMatrizVista = gl.getUniformLocation(programaID, "uMatrizVista");
+            uMatrizModelo = gl.getUniformLocation(programaID, "uMatrizModelo");
+            uUnidadDeTextura = gl.getUniformLocation(programaID, "uUnidadDeTextura");
+            uMatrizTextura = gl.getUniformLocation(programaID, "uMatrizTextura");
+
+            /***************************************************************************/
+            /* Paso 3: Se define la geometría y se almacenan en los buffers de memoria.*/
+            /***************************************************************************/
+
+            /* Coordenadas cartesianas (x, y)  */
+            let vertices = [
+                -2, -2, // 0
+                2, -2, // 1
+                2, 2, // 2
+                -2, 2, // 3
+            ];
+            let verticesFondo = [
+                -5, -5, // 0
+                5, -5, // 1
+                5, 5, // 2
+                -5, 5, // 3
+            ];
+
+            let verticesDeco1 = [
+                -2, -2, // 0
+                 2, -2, // 1
+                 2,  2, // 2
+                -2,  2, // 3
+            ];
+            
+
+            /* Coordenadas de textura (u, v) warrior blue */
+            let coord_textura = [
+                0, 6 / 8, // 0
+                1 / 6, 6 / 8, // 1
+                1 / 6, 7 / 8, // 2
+                0, 7 / 8, // 3
+            ];
+
+            // cordenadas texturas arquero
+            let coord_textura_arquero = [
+                0, 6 / 7, // 0
+                1 / 8, 6 / 7, // 1
+                1 / 8, 7 / 7, // 2
+                0, 7 / 7, // 3
+            ];
+
+            // cordenadas texturas pawn red
+            let coord_textura_pawn_red = [
+                0, 3/6, // 0
+                1 / 6, 3/6, // 1
+                1 / 6, 4/6, // 2
+                0, 4/ 6, // 3
+            ];
+
+            let coord_textura_fondo = [
+                0, 0, // 0
+                1, 0, // 1
+                1, 1, // 2
+                0, 1, // 3
+            ];
+
+            let coord_textura_deco1 = [
+                0.0, 0.0, // 0
+                1.0, 0.0, // 1
+                1.0, 1.0, // 2
+                0.0, 1.0, // 3
+            ];
+
+            // ---------------   VAO WARRIOR BLUE
+            rectanguloVAO = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAO);
+
+            let codigoVertices = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoVertices);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            let codigoCoordenadasDeTextura = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoCoordenadasDeTextura);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            //-------------------------------------CREAR VAO ARCHER PURPLE
+            rectanguloVAO2 = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAO2);
+
+            // let codigoVertices = gl.createBuffer();   MISMO VERTICES QUE EL warrior
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoVertices);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            let codigoCoordenadasDeTextura2 = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoCoordenadasDeTextura2);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura_arquero), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            //-------------------------------------CREAR VAO PAWN RED
+            rectanguloVAO3 = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAO3);
+
+            // let codigoVertices = gl.createBuffer();   MISMO VERTICES QUE EL warrior
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoVertices);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertices), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            let codigoCoordenadasDeTextura3 = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoCoordenadasDeTextura3);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura_pawn_red), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            //-------------------------------------CREAR VAO FONDO
+            rectanguloVAOFondo = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAOFondo);
+
+            let codigoVerticesFondo = gl.createBuffer();   
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoVerticesFondo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesFondo), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            let codigoCoordenadasDeTexturaFondo = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoCoordenadasDeTexturaFondo);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura_fondo), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            //-------------------------------------CREAR VAO DECORACION
+            rectanguloVAODeco1 = gl.createVertexArray();
+            gl.bindVertexArray(rectanguloVAODeco1);
+            
+
+            let codigoVerticesDeco1 = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoVerticesDeco1);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verticesDeco1), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(0);
+            gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+            let codigoCoordenadasDeTexturaDeco1 = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, codigoCoordenadasDeTexturaDeco1);
+            gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coord_textura_deco1), gl.STATIC_DRAW);
+            gl.enableVertexAttribArray(1);
+            gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+
+            gl.bindVertexArray(null);
+            gl.bindBuffer(gl.ARRAY_BUFFER, null);
+
+            /***************************************************************************/
+            /* Lee la Textura           caballero                                                */
+            /***************************************************************************/
+
+            codigoDeTextura = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagen = document.getElementById("imagenTextura");
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagen);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+            /***************************************************************************/
+            /* Lee la Textura     arquero                                                       */
+            /***************************************************************************/
+
+            codigoDeTextura2 = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura2);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagen2 = document.getElementById("imagenTextura2");
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagen2);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+
+            /***************************************************************************/
+            /* Lee la Textura     PAWN RED                                                       */
+            /***************************************************************************/
+
+            codigoDeTextura3 = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTextura3);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagen3 = document.getElementById("imagenTextura3");
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagen3);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+            
+            /***************************************************************************/
+            /* Lee la Textura     FONDO                                                       */
+            /***************************************************************************/
+
+            codigoDeTexturaFondo = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaFondo);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagenFondo = document.getElementById("imagenFondo");
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagenFondo);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+
+            /***************************************************************************/
+            /* Lee la Textura     DECORACION 1                                           */
+            /***************************************************************************/
+
+            codigoDeTexturaDeco1 = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaDeco1);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagenDeco1 = document.getElementById("imagenDecoracion1");
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagenDeco1);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+            /***************************************************************************/
+            /* Lee la Textura     DECORACION 2                                           */
+            /***************************************************************************/
+
+            codigoDeTexturaDeco2 = gl.createTexture();
+            gl.bindTexture(gl.TEXTURE_2D, codigoDeTexturaDeco2);
+            gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+            let imagenDeco2 = document.getElementById("imagenDecoracion2"); // <-- CAMBIO
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, imagenDeco2); // <-- CAMBIO
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.REPEAT);
+            gl.bindTexture(gl.TEXTURE_2D, null);
+
+            /***************************************************************************/
+            /* Paso 4: Se renderiza                                                    */
+            /***************************************************************************/
+
+            // CAMBIO 3: AJUSTAR LA PROYECCIÓN ORTOGONAL A LA RELACIÓN DE ASPECTO
+            ortho(MatrizProyeccion, -5 * gl.canvas.width/gl.canvas.height,  5 * gl.canvas.width/gl.canvas.height, -5, 5, -5, 5);
+            gl.uniformMatrix4fv(uMatrizProyeccion, false, MatrizProyeccion);
+
+            // Matriz de Vista
+            identidad(MatrizVista);
+            gl.uniformMatrix4fv(uMatrizVista, false, MatrizVista);
+
+            gl.enable(gl.BLEND);
+            gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+            gl.clearColor(0.0, 0.5, 1.0, 1.0); // Tu color de fondo (blanco)
+            dibuja();
+
+        }
+
+        /* Llama a main una vez que la página web se haya cargado. */
+        window.onload = main;
+
+    </script>
+</body>
+
+</html>
