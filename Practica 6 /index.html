@@ -133,14 +133,14 @@
       gl.shaderSource(shaderDeVertice, document.getElementById("vs").text.trim());
       gl.compileShader(shaderDeVertice);
       if (!gl.getShaderParameter(shaderDeVertice, gl.COMPILE_STATUS)) {
-         console.error(gl.getShaderInfoLog(shaderDeVere));
+         console.error(gl.getShaderInfoLog(shaderDeVertice));
       }
 
-      let shaderDeFragmento = gl.createShader(gl.FRAGM_SHADER);
-      gl.shaderSource(shaderDeFragmento, document.getEentById("fs").text.trim());
+      let shaderDeFragmento = gl.createShader(gl.FRAGMENT_SHADER);
+      gl.shaderSource(shaderDeFragmento, document.getElementById("fs").text.trim());
       gl.compileShader(shaderDeFragmento);
-      if (!gl.getShaderParameter(shaderDeFragmento, glMPILE_STATUS)) {
-         console.error(gl.getShaderInfoLog(shaderDeFranto));
+      if (!gl.getShaderParameter(shaderDeFragmento, gl.COMPILE_STATUS)) {
+         console.error(gl.getShaderInfoLog(shaderDeFragmento));
       }
 
       programaID = gl.createProgram();
